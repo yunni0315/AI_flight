@@ -59,24 +59,50 @@ class EventBus:
             for handler in self._subscribers[event_type]:
                 handler(event)
 
+def euler_to_quaternion(roll_rad: float, pitch_rad: float, yaw_rad: float = 0.0) -> list[float]:
+    """오일러 각(Roll, Pitch, Yaw in radians)을 쿼터니언 [w, x, y, z]으로 변환"""
+    cy = math.cos(yaw_rad * 0.5)
+    sy = math.sin(yaw_rad * 0.5)
+    cp = math.cos(pitch_rad * 0.5)
+    sp = math.sin(pitch_rad * 0.5)
+    cr = math.cos(roll_rad * 0.5)
+    sr = math.sin(roll_rad * 0.5)
+
+    w = cr * cp * cy + sr * sp * sy
+    x = sr * cp * cy - cr * sp * sy
+    y = cr * sp * cy + sr * cp * sy
+    z = cr * cp * sy - sr * sp * cy
+    return [w, x, y, z]
+
 class MavlinkActuator:
     def __init__(self, master):
         self.master = master
+        self._start_time = time.time()
 
     def handle_attitude_control(self, event: AttitudeControlEvent):
+        if self.master is None:
+            return
+
         roll_rad = math.radians(event.roll_deg)
         pitch_rad = math.radians(event.pitch_deg)
         yaw_rate_rad = math.radians(event.yaw_rate_deg_s)
         
-        # MAVLink SET_ATTITUDE_TARGET (0b10000011: roll/pitch/yaw_rate 활성화)
+        # MAVLink time_boot_ms는 32비트 부호없는 정수(0~4294967295)이므로 오버플로우 방지
+        time_boot_ms = int((time.time() - self._start_time) * 1000) & 0xFFFFFFFF
+        
+        # 오일러 각을 쿼터니언으로 변환
+        q = euler_to_quaternion(roll_rad, pitch_rad, 0.0)
+
+        # MAVLink SET_ATTITUDE_TARGET
+        # type_mask = 0b00000111 (7): Roll/Pitch/Yaw Rate 무시하고 Quaternion 자세 및 Throttle 적용
         self.master.mav.set_attitude_target_send(
-            int(time.time() * 1000),
+            time_boot_ms,
             self.master.target_system,
             self.master.target_component,
-            0b10000011,
-            [1, 0, 0, 0],
-            roll_rad,
-            pitch_rad,
+            0b00000111,
+            q,
+            0.0,
+            0.0,
             yaw_rate_rad,
             event.throttle
         )
