@@ -5,6 +5,11 @@ from dataclasses import dataclass
 from typing import Callable, Dict, List, Type
 from pymavlink import mavutil
 
+# 비행 안전 기본 상수
+MIN_SAFE_FLOOR_ALT_M = 15.0  # 하한 안전 고도 (이하 하강 절대 금지)
+DEFAULT_TARGET_ALT_M = 30.0  # 기본 정찰 순항 고도
+DEFAULT_ABORT_ALT_M = 45.0   # 복행 안전 고도
+
 @dataclass(frozen=True)
 class TelemetryState:
     lat: float = 0.0
@@ -14,6 +19,17 @@ class TelemetryState:
     pitch_deg: float = 0.0
     yaw_deg: float = 0.0
     ground_speed_mps: float = 0.0
+
+    def is_valid(self) -> bool:
+        """텔레메트리 유효성 검사 (GPS 수신 및 비정상 NaN/Inf 필터링)"""
+        if math.isnan(self.lat) or math.isnan(self.lon) or math.isnan(self.alt_m):
+            return False
+        if math.isinf(self.lat) or math.isinf(self.lon) or math.isinf(self.alt_m):
+            return False
+        # 유효한 GPS 좌표 범위 체크 (초기화 0,0 제외)
+        if abs(self.lat) > 90.0 or abs(self.lon) > 180.0:
+            return False
+        return True
 
 @dataclass(frozen=True)
 class TargetDetection:
@@ -29,6 +45,7 @@ class TargetDetection:
 class FlightContext:
     telemetry: TelemetryState
     target: TargetDetection | None
+    is_guided_mode: bool = True  # FC가 GUIDED 모드인지 여부
 
 @dataclass(frozen=True)
 class AttitudeControlEvent:
