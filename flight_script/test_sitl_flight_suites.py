@@ -76,8 +76,8 @@ class TestSuite1_FSM_Baseline(unittest.TestCase):
         ctx_with_target = FlightContext(telemetry=telem, target=target)
         self.fsm.evaluate(ctx_with_target)
 
-        # APPROACH 상태 전이 확인
-        self.assertEqual(self.fsm.state, FlightState.APPROACH)
+        # 타겟 발견 및 좌표 픽스 완료 후 정밀 진입로 형성을 위한 장주 선회(ABORT_CLIMB) 전이 확인
+        self.assertEqual(self.fsm.state, FlightState.ABORT_CLIMB)
         self.assertIsNotNone(self.fsm.remembered_target_gps)
 
     def test_1_2_approach_to_target_locked(self):
